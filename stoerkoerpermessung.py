@@ -74,13 +74,6 @@ class Stoerkoerpermessung:
         start = float(settings["Start"])
         stop = float(settings["Stop"])
         
-        # Infinite-Modus
-        infinite = settings.getboolean("Infinite")
-        
-        # ResonanceCurve-Modus
-        rc_mode = settings.getboolean("CaptureResonanceCurve")
-        rc_folder = settings["ResonanceCurveFolder"]
-        
         # Checkmode Settings
         checkmode = settings.getboolean("Checkmode")
         cm_reference = float(settings["ReferencePoint"])
@@ -100,54 +93,38 @@ class Stoerkoerpermessung:
             steps = int(settings["Steps"])
             stepsize = (stop - start) / steps
         
-        # Infinite-Loop
-        inf_cnt = 1
-        while True:
-            if infinite:
-                appendix = "_{:0>2}".format(inf_cnt)
+        
+        with open(self.out_filename, "w") as outf:
+            # Tabellenkopf
+            print("# Config: {}".format(self.config_filename), file=outf)
+            print("# Date: {}".format(asctime()), file=outf)
+            print("# Center: {}".format(self.vna.get_center()), file=outf)
+            print("# Span: {}".format(self.vna.get_span()), file=outf)
+            print("# Points: {}".format(self.vna.get_points()), file=outf)
+            
+            if checkmode:
+                print("# P\tf\tf_ref\tfreq-t_ref", file=outf)
             else:
-                appendix = ""
+                print("# P\tf", file=outf)
             
-            name, ext = os.path.splitext(self.out_filename)
-            
-            with open(name + appendix + ext, "w") as outf:
-                # Tabellenkopf
-                print("# Config: {}".format(self.config_filename), file=outf)
-                print("# Date: {}".format(asctime()), file=outf)
-                print("# Center: {}".format(self.vna.get_center()), file=outf)
-                print("# Span: {}".format(self.vna.get_span()), file=outf)
-                print("# Points: {}".format(self.vna.get_points()), file=outf)
+            pos = start
+            while stop - pos > -1E-6:
+                print("Measuring: d = {} mm".format(pos))
                 
                 if checkmode:
-                    print("# P\tf\tf_ref\tfreq-t_ref", file=outf)
-                else:
-                    print("# P\tf", file=outf)
+                    f_ref = self.get_freq_at(cm_reference)
+                freq = self.get_freq_at(pos)
                 
-                pos = start
-                while stop - pos > -1E-6:
-                    print("Measuring: d = {} mm".format(pos))
-                    
-                    if checkmode:
-                        f_ref = self.get_freq_at(cm_reference)
-                        if rc_mode:
-                            self.vna.write_raw(rc_folder + "{:0>4}mm_ref".format(int(pos)) + appendix + ext)
-                    freq = self.get_freq_at(pos)
-                    if rc_mode:
-                        self.vna.write_raw(rc_folder + "{:0>4}mm".format(int(pos)) + appendix + ext)
-                    
-                    if checkmode:
-                        print("{0:.3f}\t{1}\t{2}\t{3}".format(pos, freq, f_ref, freq - f_ref),
-                              file=outf)
-                    else:
-                        print("{0:.3f}\t{1}".format(pos, freq), file=outf)
-                    
-                    pos += stepsize
-                    outf.flush()
-            
-            inf_cnt += 1
-            self.motor.move_to(start)
-            
-            if not infinite: break
+                if checkmode:
+                    print("{0:.3f}\t{1}\t{2}\t{3}".format(pos, freq, f_ref, freq - f_ref),
+                          file=outf)
+                else:
+                    print("{0:.3f}\t{1}".format(pos, freq), file=outf)
+                
+                pos += stepsize
+                outf.flush()
+        self.motor.move_to(start)
+        
         
     def get_freq_at(self, pos):
         delay = float(self.config["MEASUREMENT"]["Delay"])
